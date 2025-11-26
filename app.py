@@ -21,7 +21,7 @@ st.caption("Ask me about your campaign performance, audience overlaps, or SQL qu
 # SIDEBAR: CONFIGURACIÓN
 # ---------------------------------------------------------
 with st.sidebar:
-    st.header("⚙️ Configuración")
+    st.header("⚙️ Settings")
     
     # --- Chat History Management ---
     if "chats" not in st.session_state:
@@ -59,9 +59,9 @@ with st.sidebar:
     
     # Refactor: Use multiselect for flexible context
     selected_advertisers = st.multiselect(
-        "Selecciona Advertisers (Vacío = Global):", 
+        "Select Advertisers (Empty = Global):", 
         advertisers,
-        help="Deja vacío para consultar todos los anunciantes. Selecciona uno o más para filtrar."
+        help="Leave empty to query all advertisers. Select one or more to filter."
     )
     
     # Date Range Picker
@@ -78,7 +78,7 @@ with st.sidebar:
     # Logic & Context Handling
     if not selected_advertisers:
         # Global Context
-        st.info("🌎 **Contexto Global**\n\nAcceso a TODOS los anunciantes.")
+        st.info("🌎 **Global Context**\n\nAccess to ALL advertisers.")
         system_instruction = (
             "You have access to data for ALL advertisers. "
             "Do not filter by advertiser unless specifically asked in the user's question."
@@ -95,7 +95,7 @@ with st.sidebar:
     st.caption("AMC Instance ID: amc123456789")
     
     # Debug: Show the constructed system prompt
-    with st.expander("🔍 Ver System Prompt"):
+    with st.expander("🔍 View System Prompt"):
         st.code(system_instruction, language="text")
 
     # Schema Viewer
