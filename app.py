@@ -2,6 +2,9 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import time # Importamos time para simular que la IA "piensa"
+import pandas as pd
+import datetime
+import random
 
 
 
@@ -53,6 +56,84 @@ with st.sidebar:
     with st.expander("🔍 Ver System Prompt"):
         st.code(system_instruction, language="text")
 
+    # Schema Viewer
+    with st.expander("🗄️ Database Schema (Reference)"):
+        schema_info = {
+            "amc_consolidated": {
+                "columns": ["campaign_name", "impressions", "spend", "roas", "date", "advertiser_name"],
+                "description": "Consolidated campaign performance data."
+            }
+        }
+        st.json(schema_info)
+
+    # Clear Chat Button
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.messages = []
+        st.rerun()
+
+# ---------------------------------------------------------
+# MOCK AGENT LOGIC
+# ---------------------------------------------------------
+def get_mock_agent_response(user_query, selected_advertisers):
+    """
+    Simulates the LLM + SQL Agent.
+    Returns a dict with: text, sql, data (DataFrame)
+    """
+    # 1. Determine Context
+    if not selected_advertisers:
+        where_clause = ""
+        context_msg = "Global Context"
+    else:
+        adv_list = ", ".join([f"'{adv}'" for adv in selected_advertisers])
+        where_clause = f"WHERE advertiser_name IN ({adv_list})"
+        context_msg = f"Filtered Context: {selected_advertisers}"
+
+    # 2. Generate Mock SQL
+    # We'll just make a generic query that looks relevant
+    sql_query = f"""
+    SELECT 
+        date, 
+        campaign_name, 
+        SUM(spend) as total_spend, 
+        SUM(impressions) as total_impressions
+    FROM amc_consolidated
+    {where_clause}
+    GROUP BY date, campaign_name
+    ORDER BY date DESC
+    LIMIT 100;
+    """
+
+    # 3. Generate Mock Data
+    # Create a date range
+    dates = pd.date_range(end=datetime.date.today(), periods=10).tolist()
+    
+    # Create fake campaigns
+    campaigns = [f"Campaign_{i}" for i in range(1, 6)]
+    
+    data_rows = []
+    for _ in range(20): # Generate 20 random rows
+        data_rows.append({
+            "date": random.choice(dates),
+            "campaign": random.choice(campaigns),
+            "spend": round(random.uniform(100, 5000), 2),
+            "impressions": random.randint(1000, 50000)
+        })
+    
+    df = pd.DataFrame(data_rows).sort_values("date")
+
+    # 4. Generate Text Response
+    text_response = (
+        f"Based on your request '{user_query}', I have retrieved performance data "
+        f"under the **{context_msg}**.\n\n"
+        "Here is the SQL query I generated and the resulting data:"
+    )
+
+    return {
+        "text": text_response,
+        "sql": sql_query,
+        "data": df
+    }
+
 # 1. Inicializar el historial del chat en la sesión
 # Esto es vital para que los mensajes no desaparezcan al hacer clic en otros botones
 if "messages" not in st.session_state:
@@ -62,6 +143,17 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
+        # Render rich content if available
+        if "sql" in message:
+            with st.expander("View Generated SQL"):
+                st.code(message["sql"], language="sql")
+        
+        if "data" in message:
+            st.dataframe(message["data"])
+            # Simple chart
+            if "date" in message["data"].columns and "spend" in message["data"].columns:
+                st.line_chart(message["data"], x="date", y="spend")
 
 # 3. Capturar la entrada del usuario
 if prompt := st.chat_input("Type your message here..."):
@@ -74,44 +166,24 @@ if prompt := st.chat_input("Type your message here..."):
 
     # B. Generar respuesta de la IA (Simulación)
     with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
+        # Call Mock Agent
+        response_obj = get_mock_agent_response(prompt, selected_advertisers)
         
-        # Lógica simple de respuesta (Simulación de AMC)
-        prompt_lower = prompt.lower()
+        # Display Text
+        st.markdown(response_obj["text"])
         
-        # Determine context variables for simulation
-        if not selected_advertisers:
-            context_label = "Global (Todos los anunciantes)"
-            where_clause_sql = "-- No advertiser filter (Global Analysis)"
-        else:
-            context_label = f"Filtrado ({', '.join(selected_advertisers)})"
-            # Create SQL IN clause
-            adv_list_str = ", ".join([f"'{adv}'" for adv in selected_advertisers])
-            where_clause_sql = f"WHERE advertiser_name IN ({adv_list_str})"
-
-        if "hola" in prompt_lower or "hello" in prompt_lower:
-            respuesta_ia = f"¡Hola! Estoy operando en contexto **{context_label}**. ¿Qué insights necesitas hoy?"
+        # Display SQL
+        with st.expander("View Generated SQL"):
+            st.code(response_obj["sql"], language="sql")
             
-        elif "sql" in prompt_lower or "query" in prompt_lower or "consulta" in prompt_lower:
-            respuesta_ia = f"Generando consulta SQL para **{context_label}**:\n\n```sql\nSELECT\n  advertiser_name,\n  COUNT(DISTINCT user_id) as unique_users\nFROM impressions\n{where_clause_sql}\nGROUP BY advertiser_name\n```\n\nNota cómo el filtro se adapta a tu selección."
-            
-        elif "audiencia" in prompt_lower or "audience" in prompt_lower:
-            respuesta_ia = f"Analizando audiencias para: **{context_label}**. He encontrado patrones de solapamiento interesantes entre los segmentos de 'Lujo' y 'Tecnología' dentro de este alcance."
-            
-        elif "campaña" in prompt_lower or "campaign" in prompt_lower:
-            respuesta_ia = f"El reporte de campañas para **{context_label}** está listo. El ROAS agregado es de 3.8. ¿Quieres ver el desglose por anunciante o por fecha?"
-            
-        else:
-            respuesta_ia = f"Entendido. Procesando solicitud sobre '{prompt}' en el contexto **{context_label}**.\n\n*Instrucción al Modelo (System Prompt):*\n> {system_instruction}"
-
-        # Simular efecto de escritura (typewriter effect)
-        for chunk in respuesta_ia.split():
-            full_response += chunk + " "
-            time.sleep(0.05)
-            message_placeholder.markdown(full_response + "▌")
-        
-        message_placeholder.markdown(full_response)
+        # Display Data
+        st.dataframe(response_obj["data"])
+        st.line_chart(response_obj["data"], x="date", y="spend")
     
-    # Guardar respuesta de la IA en historial
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    # Guardar respuesta completa en historial
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": response_obj["text"],
+        "sql": response_obj["sql"],
+        "data": response_obj["data"]
+    })
