@@ -10,8 +10,8 @@ import time # Importamos time para simular que la IA "piensa"
 # ---------------------------------------------------------
 
 st.divider() # Una línea visual para separar secciones
-st.header("🤖 Chatbot de Inteligencia Artificial")
-st.caption("Este es un chat de demostración. Para hacerlo real, necesitarías conectar una API key (como OpenAI o Google Gemini).")
+st.header("🤖 AMC Agent")
+st.caption("This is just a prototype demo. The AI responses are simulated for demonstration purposes.")
 
 # 1. Inicializar el historial del chat en la sesión
 # Esto es vital para que los mensajes no desaparezcan al hacer clic en otros botones
@@ -24,7 +24,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # 3. Capturar la entrada del usuario
-if prompt := st.chat_input("Escribe algo a la IA..."):
+if prompt := st.chat_input("Type your message here..."):
     
     # A. Mostrar mensaje del usuario
     with st.chat_message("user"):
