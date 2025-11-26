@@ -10,8 +10,8 @@ import time # Importamos time para simular que la IA "piensa"
 # ---------------------------------------------------------
 
 st.divider() # Una línea visual para separar secciones
-st.header("🤖 AMC Agent")
-st.caption("This is just a prototype demo. The AI responses are simulated for demonstration purposes.")
+st.header("☁️ Amazon Marketing Cloud (AMC) Assistant")
+st.caption("Ask me about your campaign performance, audience overlaps, or SQL queries for AMC.")
 
 # 1. Inicializar el historial del chat en la sesión
 # Esto es vital para que los mensajes no desaparezcan al hacer clic en otros botones
@@ -37,14 +37,23 @@ if prompt := st.chat_input("Type your message here..."):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Lógica simple de respuesta (Aquí es donde conectarías OpenAI/Gemini)
-        # Por ahora es un "Eco" inteligente para la demo
-        if "hola" in prompt.lower():
-            respuesta_ia = "¡Hola! ¿En qué puedo ayudarte hoy con tu análisis de datos?"
-        elif "grafico" in prompt.lower() or "gráfico" in prompt.lower():
-            respuesta_ia = "Los gráficos de arriba fueron generados con Matplotlib. ¿Te gustaría saber cómo cambiarles el color?"
+        # Lógica simple de respuesta (Simulación de AMC)
+        prompt_lower = prompt.lower()
+        
+        if "hola" in prompt_lower or "hello" in prompt_lower:
+            respuesta_ia = "¡Hola! Soy tu asistente de Amazon Marketing Cloud. Puedo ayudarte a generar consultas SQL, analizar audiencias o revisar el rendimiento de tus campañas. ¿Por dónde empezamos?"
+            
+        elif "sql" in prompt_lower or "query" in prompt_lower or "consulta" in prompt_lower:
+            respuesta_ia = "Claro, aquí tienes un ejemplo de una consulta SQL para ver el solapamiento de audiencias en AMC:\n\n```sql\nSELECT\n  user_id,\n  COUNT(DISTINCT campaign_id) as campaigns_seen\nFROM impressions\nGROUP BY user_id\nHAVING campaigns_seen > 1\n```\n¿Quieres que la adapte a tus tablas?"
+            
+        elif "audiencia" in prompt_lower or "audience" in prompt_lower:
+            respuesta_ia = "Para analizar tus audiencias, podemos cruzar los datos de impresiones con las conversiones. En AMC, esto nos permite ver qué segmentos tienen mayor propensión a compra después de ver un anuncio de Display."
+            
+        elif "campaña" in prompt_lower or "campaign" in prompt_lower:
+            respuesta_ia = "El rendimiento de tus campañas parece estable. Según los últimos datos simulados, el ROAS ha aumentado un 15% en la categoría de 'Electrónica'. ¿Quieres ver un desglose por ASIN?"
+            
         else:
-            respuesta_ia = f"Interesante... has dicho: '{prompt}'. Como soy una demo, solo repito cosas, ¡pero imagina las posibilidades!"
+            respuesta_ia = f"Entendido. Has preguntado sobre: '{prompt}'. Para darte una respuesta precisa sobre AMC, necesitaría conectarme a tu instancia. Por ahora, puedo explicarte conceptos o ayudarte con la sintaxis SQL."
 
         # Simular efecto de escritura (typewriter effect)
         for chunk in respuesta_ia.split():
