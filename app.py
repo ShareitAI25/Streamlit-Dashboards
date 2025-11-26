@@ -20,12 +20,38 @@ with st.sidebar:
     st.header("⚙️ Configuración")
     # Lista simulada de anunciantes
     advertisers = ["Brand A (Electronics)", "Brand B (Fashion)", "Brand C (Home & Kitchen)", "Global Corp"]
-    selected_advertiser = st.selectbox("Selecciona un Advertiser:", advertisers)
+    
+    # Refactor: Use multiselect for flexible context
+    selected_advertisers = st.multiselect(
+        "Selecciona Advertisers (Vacío = Global):", 
+        advertisers,
+        help="Deja vacío para consultar todos los anunciantes. Selecciona uno o más para filtrar."
+    )
     
     st.divider()
-    st.info(f"Analizando datos para: **{selected_advertiser}**")
+    
+    # Logic & Context Handling
+    if not selected_advertisers:
+        # Global Context
+        st.info("🌎 **Contexto Global**\n\nAcceso a TODOS los anunciantes.")
+        system_instruction = (
+            "You have access to data for ALL advertisers. "
+            "Do not filter by advertiser unless specifically asked in the user's question."
+        )
+    else:
+        # Filtered Context
+        st.info(f"🎯 **Contexto Filtrado**\n\n{', '.join(selected_advertisers)}")
+        system_instruction = (
+            f"SCOPE RESTRICTION: You are strictly limited to the following advertisers: {selected_advertisers}. "
+            "You MUST include a WHERE clause filtering by these specific names/IDs in every SQL query you generate."
+        )
+
     st.markdown("---")
     st.caption("AMC Instance ID: amc123456789")
+    
+    # Debug: Show the constructed system prompt
+    with st.expander("🔍 Ver System Prompt"):
+        st.code(system_instruction, language="text")
 
 # 1. Inicializar el historial del chat en la sesión
 # Esto es vital para que los mensajes no desaparezcan al hacer clic en otros botones
@@ -54,20 +80,30 @@ if prompt := st.chat_input("Type your message here..."):
         # Lógica simple de respuesta (Simulación de AMC)
         prompt_lower = prompt.lower()
         
+        # Determine context variables for simulation
+        if not selected_advertisers:
+            context_label = "Global (Todos los anunciantes)"
+            where_clause_sql = "-- No advertiser filter (Global Analysis)"
+        else:
+            context_label = f"Filtrado ({', '.join(selected_advertisers)})"
+            # Create SQL IN clause
+            adv_list_str = ", ".join([f"'{adv}'" for adv in selected_advertisers])
+            where_clause_sql = f"WHERE advertiser_name IN ({adv_list_str})"
+
         if "hola" in prompt_lower or "hello" in prompt_lower:
-            respuesta_ia = f"¡Hola! Estoy conectado a la instancia de **{selected_advertiser}**. ¿Qué necesitas analizar hoy sobre este anunciante?"
+            respuesta_ia = f"¡Hola! Estoy operando en contexto **{context_label}**. ¿Qué insights necesitas hoy?"
             
         elif "sql" in prompt_lower or "query" in prompt_lower or "consulta" in prompt_lower:
-            respuesta_ia = f"Generando consulta para **{selected_advertiser}**...\n\nAquí tienes una SQL para ver el solapamiento de audiencias:\n```sql\nSELECT\n  user_id,\n  COUNT(DISTINCT campaign_id) as campaigns_seen\nFROM impressions\nWHERE advertiser_name = '{selected_advertiser}'\nGROUP BY user_id\nHAVING campaigns_seen > 1\n```"
+            respuesta_ia = f"Generando consulta SQL para **{context_label}**:\n\n```sql\nSELECT\n  advertiser_name,\n  COUNT(DISTINCT user_id) as unique_users\nFROM impressions\n{where_clause_sql}\nGROUP BY advertiser_name\n```\n\nNota cómo el filtro se adapta a tu selección."
             
         elif "audiencia" in prompt_lower or "audience" in prompt_lower:
-            respuesta_ia = f"Analizando audiencias de **{selected_advertiser}**... He detectado que el segmento 'Compradores Recientes' tiene un alto solapamiento con tus campañas de Display."
+            respuesta_ia = f"Analizando audiencias para: **{context_label}**. He encontrado patrones de solapamiento interesantes entre los segmentos de 'Lujo' y 'Tecnología' dentro de este alcance."
             
         elif "campaña" in prompt_lower or "campaign" in prompt_lower:
-            respuesta_ia = f"El rendimiento de las campañas de **{selected_advertiser}** es positivo. El ROAS promedio esta semana es de 4.5. ¿Quieres desglosarlo por ASIN?"
+            respuesta_ia = f"El reporte de campañas para **{context_label}** está listo. El ROAS agregado es de 3.8. ¿Quieres ver el desglose por anunciante o por fecha?"
             
         else:
-            respuesta_ia = f"Entendido. Consultando base de datos de **{selected_advertiser}** sobre: '{prompt}'. (Simulación: Aquí se ejecutaría la query real en AMC)."
+            respuesta_ia = f"Entendido. Procesando solicitud sobre '{prompt}' en el contexto **{context_label}**.\n\n*Instrucción al Modelo (System Prompt):*\n> {system_instruction}"
 
         # Simular efecto de escritura (typewriter effect)
         for chunk in respuesta_ia.split():
