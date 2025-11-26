@@ -131,7 +131,7 @@ with st.sidebar:
 def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
     """
     Simulates the LLM + SQL Agent.
-    Returns a dict with: text, sql, data (DataFrame)
+    Returns a dict with: text, sql, data (DataFrame), chart_config (dict)
     """
     # 1. Determine Context
     if not selected_advertisers:
@@ -149,50 +149,125 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
         where_clause += f"\n    AND date BETWEEN '{start_date}' AND '{end_date}'"
         date_msg = f"{start_date} to {end_date}"
 
-    # 2. Generate Mock SQL
-    # We'll just make a generic query that looks relevant
-    sql_query = f"""
-    SELECT 
-        date, 
-        campaign_name, 
-        SUM(spend) as total_spend, 
-        SUM(impressions) as total_impressions
-    FROM amc_consolidated
-    {where_clause}
-    GROUP BY date, campaign_name
-    ORDER BY date DESC
-    LIMIT 100;
-    """
+    query_lower = user_query.lower()
+    
+    # --- SCENARIO 1: CAMPAIGN AUDIT ---
+    if any(k in query_lower for k in ["audit", "wasted", "efficiency"]):
+        sql_query = f"""
+        SELECT campaign_name, spend, impressions, roas, status
+        FROM campaign_audit
+        {where_clause}
+        AND roas = 0
+        ORDER BY spend DESC
+        LIMIT 5;
+        """
+        
+        data_rows = []
+        for i in range(5):
+            data_rows.append({
+                "Campaign Name": f"Inefficient_Camp_{i+1}",
+                "Spend": round(random.uniform(1000, 5000), 2),
+                "Impressions": random.randint(10000, 50000),
+                "ROAS": 0.0,
+                "Status": "Inefficient"
+            })
+        df = pd.DataFrame(data_rows)
+        
+        text_response = (
+            f"I've analyzed your campaigns under **{context_msg}**. "
+            "I found 5 campaigns with high spend but zero conversions in the last 30 days."
+        )
+        chart_config = {"type": "bar", "x": "Campaign Name", "y": "Spend"}
 
-    # 3. Generate Mock Data
-    # Create a date range
-    dates = pd.date_range(end=datetime.date.today(), periods=10).tolist()
-    
-    # Create fake campaigns
-    campaigns = [f"Campaign_{i}" for i in range(1, 6)]
-    
-    data_rows = []
-    for _ in range(20): # Generate 20 random rows
-        data_rows.append({
-            "date": random.choice(dates),
-            "campaign": random.choice(campaigns),
-            "spend": round(random.uniform(100, 5000), 2),
-            "impressions": random.randint(1000, 50000)
-        })
-    
-    df = pd.DataFrame(data_rows).sort_values("date")
+    # --- SCENARIO 2: TIME-TO-CONVERSION ---
+    elif any(k in query_lower for k in ["time", "conversion", "days"]):
+        sql_query = f"""
+        SELECT days_to_convert, count(*) as conversion_count
+        FROM conversion_time_distribution
+        {where_clause}
+        GROUP BY days_to_convert
+        ORDER BY days_to_convert ASC;
+        """
+        
+        data_rows = []
+        for i in range(1, 15):
+            count = int(1000 * (1 / i)) # Decay
+            data_rows.append({
+                "Days_to_Convert": i,
+                "Conversion_Count": count
+            })
+        df = pd.DataFrame(data_rows)
+        
+        text_response = (
+            f"Here is the conversion delay analysis for **{context_msg}**. "
+            "40% of your users convert on Day 1, but there is a significant tail up to Day 14."
+        )
+        chart_config = {"type": "bar", "x": "Days_to_Convert", "y": "Conversion_Count"}
 
-    # 4. Generate Text Response
-    text_response = (
-        f"Based on your request '{user_query}', I have retrieved performance data "
-        f"under the **{context_msg}** for the period **{date_msg}**.\n\n"
-        "Here is the SQL query I generated and the resulting data:"
-    )
+    # --- SCENARIO 3: PRODUCT STRATEGY / GATEWAY ASINS ---
+    elif any(k in query_lower for k in ["product", "asin", "strategy"]):
+        sql_query = f"""
+        SELECT asin, product_name, ntb_orders, total_sales
+        FROM gateway_asins
+        {where_clause}
+        ORDER BY ntb_orders DESC
+        LIMIT 5;
+        """
+        
+        data_rows = []
+        for i in range(5):
+            data_rows.append({
+                "ASIN": f"B00{random.randint(10000,99999)}",
+                "Product Name": f"Product {i+1}",
+                "NTB_Orders": random.randint(50, 500),
+                "Total_Sales": round(random.uniform(5000, 20000), 2)
+            })
+        df = pd.DataFrame(data_rows)
+        
+        text_response = (
+            f"These are your top 'Gateway ASINs' for **{context_msg}**—products that new customers buy first."
+        )
+        chart_config = {"type": "bar", "x": "ASIN", "y": "NTB_Orders"}
+
+    # --- SCENARIO 4: DEFAULT / DASHBOARD ---
+    else:
+        sql_query = f"""
+        SELECT 
+            date, 
+            campaign_name, 
+            SUM(spend) as total_spend, 
+            SUM(impressions) as total_impressions
+        FROM amc_consolidated
+        {where_clause}
+        GROUP BY date, campaign_name
+        ORDER BY date DESC
+        LIMIT 100;
+        """
+        
+        dates = pd.date_range(end=datetime.date.today(), periods=10).tolist()
+        campaigns = [f"Campaign_{i}" for i in range(1, 6)]
+        data_rows = []
+        for _ in range(20):
+            data_rows.append({
+                "date": random.choice(dates),
+                "campaign": random.choice(campaigns),
+                "spend": round(random.uniform(100, 5000), 2),
+                "impressions": random.randint(1000, 50000)
+            })
+        df = pd.DataFrame(data_rows).sort_values("date")
+        
+        text_response = (
+            f"Based on your request '{user_query}', I have retrieved performance data "
+            f"under the **{context_msg}** for the period **{date_msg}**.\n\n"
+            "Here is the SQL query I generated and the resulting data:"
+        )
+        chart_config = {"type": "line", "x": "date", "y": "spend"}
 
     return {
         "text": text_response,
         "sql": sql_query,
-        "data": df
+        "data": df,
+        "chart_config": chart_config
     }
 
 # 1. Inicializar el historial del chat en la sesión (Legacy cleanup)
@@ -214,9 +289,15 @@ for message in current_messages:
         
         if "data" in message:
             st.dataframe(message["data"])
-            # Simple chart
-            if "date" in message["data"].columns and "spend" in message["data"].columns:
-                st.line_chart(message["data"], x="date", y="spend")
+            
+            # Dynamic Chart Rendering
+            chart_config = message.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
+            if chart_config["type"] == "bar":
+                st.bar_chart(message["data"], x=chart_config["x"], y=chart_config["y"])
+            elif chart_config["type"] == "line":
+                # Fallback check for columns
+                if chart_config["x"] in message["data"].columns and chart_config["y"] in message["data"].columns:
+                    st.line_chart(message["data"], x=chart_config["x"], y=chart_config["y"])
 
 # Starter Prompts (Only if chat is empty)
 if not current_messages:
@@ -270,12 +351,20 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
             
         # Display Data
         st.dataframe(response_obj["data"])
-        st.line_chart(response_obj["data"], x="date", y="spend")
+        
+        # Dynamic Chart Rendering
+        chart_config = response_obj.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
+        if chart_config["type"] == "bar":
+            st.bar_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
+        elif chart_config["type"] == "line":
+            if chart_config["x"] in response_obj["data"].columns and chart_config["y"] in response_obj["data"].columns:
+                st.line_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
     
     # Guardar respuesta completa en historial
     st.session_state.chats[st.session_state.current_chat_id].append({
         "role": "assistant", 
         "content": response_obj["text"],
         "sql": response_obj["sql"],
-        "data": response_obj["data"]
+        "data": response_obj["data"],
+        "chart_config": chart_config
     })
