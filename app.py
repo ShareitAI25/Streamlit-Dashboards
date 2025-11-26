@@ -21,6 +21,38 @@ st.caption("Ask me about your campaign performance, audience overlaps, or SQL qu
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("⚙️ Configuración")
+    
+    # --- Chat History Management ---
+    if "chats" not in st.session_state:
+        st.session_state.chats = {"Chat 1": []}
+    if "current_chat_id" not in st.session_state:
+        st.session_state.current_chat_id = "Chat 1"
+
+    col_new, col_title = st.columns([1, 2])
+    with col_new:
+        if st.button("➕ New"):
+            new_id = f"Chat {len(st.session_state.chats) + 1}"
+            st.session_state.chats[new_id] = []
+            st.session_state.current_chat_id = new_id
+            st.rerun()
+    with col_title:
+        st.write(f"**{st.session_state.current_chat_id}**")
+
+    # Chat Selector
+    chat_options = list(st.session_state.chats.keys())
+    selected_chat_id = st.selectbox(
+        "Previous Chats", 
+        chat_options, 
+        index=chat_options.index(st.session_state.current_chat_id),
+        label_visibility="collapsed"
+    )
+    
+    if selected_chat_id != st.session_state.current_chat_id:
+        st.session_state.current_chat_id = selected_chat_id
+        st.rerun()
+    
+    st.divider()
+
     # Lista simulada de anunciantes
     advertisers = ["Brand A (Electronics)", "Brand B (Fashion)", "Brand C (Home & Kitchen)", "Global Corp"]
     
@@ -29,6 +61,15 @@ with st.sidebar:
         "Selecciona Advertisers (Vacío = Global):", 
         advertisers,
         help="Deja vacío para consultar todos los anunciantes. Selecciona uno o más para filtrar."
+    )
+    
+    # Date Range Picker
+    today = datetime.date.today()
+    last_30 = today - datetime.timedelta(days=30)
+    date_range = st.date_input(
+        "Date Range",
+        (last_30, today),
+        format="YYYY-MM-DD"
     )
     
     st.divider()
@@ -66,15 +107,15 @@ with st.sidebar:
         }
         st.json(schema_info)
 
-    # Clear Chat Button
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.messages = []
+    # Clear Chat Button (Current Chat Only)
+    if st.button("🗑️ Clear Current Chat"):
+        st.session_state.chats[st.session_state.current_chat_id] = []
         st.rerun()
 
 # ---------------------------------------------------------
 # MOCK AGENT LOGIC
 # ---------------------------------------------------------
-def get_mock_agent_response(user_query, selected_advertisers):
+def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
     """
     Simulates the LLM + SQL Agent.
     Returns a dict with: text, sql, data (DataFrame)
@@ -87,6 +128,13 @@ def get_mock_agent_response(user_query, selected_advertisers):
         adv_list = ", ".join([f"'{adv}'" for adv in selected_advertisers])
         where_clause = f"WHERE advertiser_name IN ({adv_list})"
         context_msg = f"Filtered Context: {selected_advertisers}"
+
+    # Date Range Context
+    date_msg = "Last 30 Days"
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        where_clause += f"\n    AND date BETWEEN '{start_date}' AND '{end_date}'"
+        date_msg = f"{start_date} to {end_date}"
 
     # 2. Generate Mock SQL
     # We'll just make a generic query that looks relevant
@@ -124,7 +172,7 @@ def get_mock_agent_response(user_query, selected_advertisers):
     # 4. Generate Text Response
     text_response = (
         f"Based on your request '{user_query}', I have retrieved performance data "
-        f"under the **{context_msg}**.\n\n"
+        f"under the **{context_msg}** for the period **{date_msg}**.\n\n"
         "Here is the SQL query I generated and the resulting data:"
     )
 
@@ -134,13 +182,15 @@ def get_mock_agent_response(user_query, selected_advertisers):
         "data": df
     }
 
-# 1. Inicializar el historial del chat en la sesión
-# Esto es vital para que los mensajes no desaparezcan al hacer clic en otros botones
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# 1. Inicializar el historial del chat en la sesión (Legacy cleanup)
+if "messages" in st.session_state:
+    del st.session_state.messages
+
+# Use the current chat's messages
+current_messages = st.session_state.chats[st.session_state.current_chat_id]
 
 # 2. Mostrar los mensajes del historial al recargar la app
-for message in st.session_state.messages:
+for message in current_messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         
@@ -155,6 +205,28 @@ for message in st.session_state.messages:
             if "date" in message["data"].columns and "spend" in message["data"].columns:
                 st.line_chart(message["data"], x="date", y="spend")
 
+# Starter Prompts (Only if chat is empty)
+if not current_messages:
+    st.markdown("### 🚀 Try a starter prompt:")
+    col1, col2, col3 = st.columns(3)
+    
+    prompt_to_run = None
+    
+    with col1:
+        if st.button("Analyze ROAS by Campaign"):
+            prompt_to_run = "Analyze ROAS by Campaign"
+    with col2:
+        if st.button("Show New-To-Brand metrics"):
+            prompt_to_run = "Show New-To-Brand metrics"
+    with col3:
+        if st.button("Path to Conversion analysis"):
+            prompt_to_run = "Path to Conversion analysis"
+            
+    if prompt_to_run:
+        # Add user message
+        st.session_state.chats[st.session_state.current_chat_id].append({"role": "user", "content": prompt_to_run})
+        st.rerun()
+
 # 3. Capturar la entrada del usuario
 if prompt := st.chat_input("Type your message here..."):
     
@@ -162,12 +234,19 @@ if prompt := st.chat_input("Type your message here..."):
     with st.chat_message("user"):
         st.markdown(prompt)
     # Guardar mensaje del usuario en historial
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.chats[st.session_state.current_chat_id].append({"role": "user", "content": prompt})
+    
+    # Trigger response generation
+    prompt_to_run = prompt # Just to reuse logic if needed, but we process directly below
 
+# Process Response (if last message is user)
+if st.session_state.chats[st.session_state.current_chat_id] and st.session_state.chats[st.session_state.current_chat_id][-1]["role"] == "user":
+    last_user_msg = st.session_state.chats[st.session_state.current_chat_id][-1]["content"]
+    
     # B. Generar respuesta de la IA (Simulación)
     with st.chat_message("assistant"):
         # Call Mock Agent
-        response_obj = get_mock_agent_response(prompt, selected_advertisers)
+        response_obj = get_mock_agent_response(last_user_msg, selected_advertisers, date_range)
         
         # Display Text
         st.markdown(response_obj["text"])
@@ -181,7 +260,7 @@ if prompt := st.chat_input("Type your message here..."):
         st.line_chart(response_obj["data"], x="date", y="spend")
     
     # Guardar respuesta completa en historial
-    st.session_state.messages.append({
+    st.session_state.chats[st.session_state.current_chat_id].append({
         "role": "assistant", 
         "content": response_obj["text"],
         "sql": response_obj["sql"],
