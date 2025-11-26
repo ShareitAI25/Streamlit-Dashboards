@@ -107,6 +107,19 @@ with st.sidebar:
         }
         st.json(schema_info)
 
+    # Quick Actions (Persistent)
+    st.markdown("### 🎯 Quick Actions")
+    quick_prompts = [
+        "Analyze ROAS by Campaign",
+        "Show New-To-Brand metrics",
+        "Path to Conversion analysis"
+    ]
+    
+    for qp in quick_prompts:
+        if st.button(qp, key=f"sidebar_{qp}"):
+            st.session_state.chats[st.session_state.current_chat_id].append({"role": "user", "content": qp})
+            st.rerun()
+
     # Clear Chat Button (Current Chat Only)
     if st.button("🗑️ Clear Current Chat"):
         st.session_state.chats[st.session_state.current_chat_id] = []
