@@ -5,6 +5,7 @@ import time # Importamos time para simular que la IA "piensa"
 import pandas as pd
 import datetime
 import random
+from fpdf import FPDF
 
 
 
@@ -124,6 +125,66 @@ with st.sidebar:
     if st.button("🗑️ Clear Current Chat"):
         st.session_state.chats[st.session_state.current_chat_id] = []
         st.rerun()
+
+# ---------------------------------------------------------
+# PDF GENERATION HELPER
+# ---------------------------------------------------------
+def generate_pdf_report(user_query, insight_text, df):
+    """
+    Generates a PDF report using FPDF.
+    Returns the PDF content as bytes.
+    """
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Header
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "AMC Insights Service", ln=True, align="C")
+    pdf.ln(10)
+    
+    # Title (User Query)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, f"Query: {user_query}", ln=True)
+    pdf.ln(5)
+    
+    # Executive Summary
+    pdf.set_font("Arial", "", 11)
+    # Multi_cell for text wrapping
+    # Encode to latin-1 to handle some special chars, though basic FPDF has limits
+    safe_text = insight_text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 7, f"Executive Summary:\n{safe_text}")
+    pdf.ln(10)
+    
+    # Data Table
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(0, 10, "Data Preview:", ln=True)
+    
+    # Table Header
+    pdf.set_font("Arial", "B", 9)
+    cols = df.columns.tolist()
+    col_width = 190 / len(cols) # Distribute width roughly
+    
+    for col in cols:
+        pdf.cell(col_width, 8, str(col), border=1)
+    pdf.ln()
+    
+    # Table Rows
+    pdf.set_font("Arial", "", 9)
+    for index, row in df.head(20).iterrows(): # Limit to 20 rows for the PDF preview
+        for col in cols:
+            val = str(row[col])
+            # Truncate if too long
+            if len(val) > 20:
+                val = val[:17] + "..."
+            pdf.cell(col_width, 8, val, border=1)
+        pdf.ln()
+        
+    # Return bytes
+    # output(dest='S') returns a string in latin-1. We encode it to bytes.
+    # Note: In newer FPDF versions, output() might return bytearray directly if dest='S' is not used or handled differently.
+    # We will use output() without arguments which returns a string in older versions, or bytes in newer.
+    # Let's try a safer approach for Streamlit compatibility.
+    return pdf.output(dest='S').encode('latin-1')
 
 # ---------------------------------------------------------
 # MOCK AGENT LOGIC
@@ -359,6 +420,15 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
         elif chart_config["type"] == "line":
             if chart_config["x"] in response_obj["data"].columns and chart_config["y"] in response_obj["data"].columns:
                 st.line_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
+        
+        # PDF Download Button
+        pdf_bytes = generate_pdf_report(last_user_msg, response_obj["text"], response_obj["data"])
+        st.download_button(
+            label="📄 Download Professional PDF Report",
+            data=pdf_bytes,
+            file_name="amc_insight_report.pdf",
+            mime="application/pdf"
+        )
     
     # Guardar respuesta completa en historial
     st.session_state.chats[st.session_state.current_chat_id].append({
