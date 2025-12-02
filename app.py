@@ -6,12 +6,31 @@ import pandas as pd
 import datetime
 import random
 from fpdf import FPDF
+from google import genai
+from google.genai import types
 
+# Initialize Gemini Client
+try:
+    # Try to get key from secrets, otherwise handle gracefully
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if api_key:
+        client = genai.Client(api_key=api_key)
+    else:
+        client = None
+except Exception as e:
+    client = None
+    # We will handle the error in the response function
 
+SYSTEM_INSTRUCTION = "You are an expert Amazon Marketing Cloud (AMC) Analyst. You help users optimize campaigns, analyze ROAS, and identify New-To-Brand opportunities. Keep answers concise and professional."
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 # ---------------------------------------------------------
 # NUEVA SECCIÓN: CHATBOT DE IA
 # ---------------------------------------------------------
+
+supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 st.divider() # Una línea visual para separar secciones
 st.header("☁️ Amazon Marketing Cloud (AMC) Assistant")
@@ -187,11 +206,11 @@ def generate_pdf_report(user_query, insight_text, df):
     return pdf.output(dest='S').encode('latin-1')
 
 # ---------------------------------------------------------
-# MOCK AGENT LOGIC
+# AGENT LOGIC (REAL AI + MOCK DATA)
 # ---------------------------------------------------------
-def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
+def get_agent_response(user_query, selected_advertisers, date_range=None):
     """
-    Simulates the LLM + SQL Agent.
+    Generates response using Gemini API for text and Mock Logic for data/charts.
     Returns a dict with: text, sql, data (DataFrame), chart_config (dict)
     """
     # 1. Determine Context
@@ -210,7 +229,29 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
         where_clause += f"\n    AND date BETWEEN '{start_date}' AND '{end_date}'"
         date_msg = f"{start_date} to {end_date}"
 
+    # 2. Call Gemini API (Step A)
+    ai_text = ""
+    try:
+        if client:
+            # Append context to the query for better AI awareness
+            full_prompt = f"{user_query}\n\n[Context: User is analyzing data for {context_msg} during {date_msg}.]"
+            
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
+                contents=full_prompt
+            )
+            ai_text = response.text
+        else:
+            ai_text = "⚠️ Gemini API Key not found or client not initialized. Please check your secrets."
+    except Exception as e:
+        ai_text = f"⚠️ Error connecting to Gemini API: {str(e)}. Using fallback response."
+
+    # 3. Hybrid Logic: Mock Data Generation (Step B)
     query_lower = user_query.lower()
+    sql_query = None
+    df = None
+    chart_config = None
     
     # --- SCENARIO 1: CAMPAIGN AUDIT ---
     if any(k in query_lower for k in ["audit", "wasted", "efficiency"]):
@@ -233,11 +274,6 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
                 "Status": "Inefficient"
             })
         df = pd.DataFrame(data_rows)
-        
-        text_response = (
-            f"I've analyzed your campaigns under **{context_msg}**. "
-            "I found 5 campaigns with high spend but zero conversions in the last 30 days."
-        )
         chart_config = {"type": "bar", "x": "Campaign Name", "y": "Spend"}
 
     # --- SCENARIO 2: TIME-TO-CONVERSION ---
@@ -258,11 +294,6 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
                 "Conversion_Count": count
             })
         df = pd.DataFrame(data_rows)
-        
-        text_response = (
-            f"Here is the conversion delay analysis for **{context_msg}**. "
-            "40% of your users convert on Day 1, but there is a significant tail up to Day 14."
-        )
         chart_config = {"type": "bar", "x": "Days_to_Convert", "y": "Conversion_Count"}
 
     # --- SCENARIO 3: PRODUCT STRATEGY / GATEWAY ASINS ---
@@ -284,14 +315,10 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
                 "Total_Sales": round(random.uniform(5000, 20000), 2)
             })
         df = pd.DataFrame(data_rows)
-        
-        text_response = (
-            f"These are your top 'Gateway ASINs' for **{context_msg}**—products that new customers buy first."
-        )
         chart_config = {"type": "bar", "x": "ASIN", "y": "NTB_Orders"}
 
-    # --- SCENARIO 4: DEFAULT / DASHBOARD ---
-    else:
+    # --- SCENARIO 4: DASHBOARD / PERFORMANCE (Explicit Request) ---
+    elif any(k in query_lower for k in ["dashboard", "sales", "overview", "performance", "chart", "graph"]):
         sql_query = f"""
         SELECT 
             date, 
@@ -316,16 +343,10 @@ def get_mock_agent_response(user_query, selected_advertisers, date_range=None):
                 "impressions": random.randint(1000, 50000)
             })
         df = pd.DataFrame(data_rows).sort_values("date")
-        
-        text_response = (
-            f"Based on your request '{user_query}', I have retrieved performance data "
-            f"under the **{context_msg}** for the period **{date_msg}**.\n\n"
-            "Here is the SQL query I generated and the resulting data:"
-        )
         chart_config = {"type": "line", "x": "date", "y": "spend"}
 
     return {
-        "text": text_response,
+        "text": ai_text,
         "sql": sql_query,
         "data": df,
         "chart_config": chart_config
@@ -401,34 +422,37 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
     # B. Generar respuesta de la IA (Simulación)
     with st.chat_message("assistant"):
         # Call Mock Agent
-        response_obj = get_mock_agent_response(last_user_msg, selected_advertisers, date_range)
+        response_obj = get_agent_response(last_user_msg, selected_advertisers, date_range)
         
         # Display Text
         st.markdown(response_obj["text"])
         
         # Display SQL
-        with st.expander("View Generated SQL"):
-            st.code(response_obj["sql"], language="sql")
+        if response_obj["sql"]:
+            with st.expander("View Generated SQL"):
+                st.code(response_obj["sql"], language="sql")
             
         # Display Data
-        st.dataframe(response_obj["data"])
-        
-        # Dynamic Chart Rendering
-        chart_config = response_obj.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
-        if chart_config["type"] == "bar":
-            st.bar_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
-        elif chart_config["type"] == "line":
-            if chart_config["x"] in response_obj["data"].columns and chart_config["y"] in response_obj["data"].columns:
-                st.line_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
-        
-        # PDF Download Button
-        pdf_bytes = generate_pdf_report(last_user_msg, response_obj["text"], response_obj["data"])
-        st.download_button(
-            label="📄 Download Professional PDF Report",
-            data=pdf_bytes,
-            file_name="amc_insight_report.pdf",
-            mime="application/pdf"
-        )
+        if response_obj["data"] is not None:
+            st.dataframe(response_obj["data"])
+            
+            # Dynamic Chart Rendering
+            chart_config = response_obj.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
+            if chart_config:
+                if chart_config["type"] == "bar":
+                    st.bar_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
+                elif chart_config["type"] == "line":
+                    if chart_config["x"] in response_obj["data"].columns and chart_config["y"] in response_obj["data"].columns:
+                        st.line_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
+            
+            # PDF Download Button
+            pdf_bytes = generate_pdf_report(last_user_msg, response_obj["text"], response_obj["data"])
+            st.download_button(
+                label="📄 Download Professional PDF Report",
+                data=pdf_bytes,
+                file_name="amc_insight_report.pdf",
+                mime="application/pdf"
+            )
     
     # Guardar respuesta completa en historial
     st.session_state.chats[st.session_state.current_chat_id].append({
@@ -436,5 +460,5 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
         "content": response_obj["text"],
         "sql": response_obj["sql"],
         "data": response_obj["data"],
-        "chart_config": chart_config
+        "chart_config": response_obj.get("chart_config")
     })
