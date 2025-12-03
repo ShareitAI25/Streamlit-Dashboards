@@ -9,7 +9,7 @@ import os
 from fpdf import FPDF
 from google import genai
 from google.genai import types
-
+from supabase import create_client, Client
 # Initialize Gemini Client
 try:
     # Try to get key from secrets, otherwise handle gracefully
