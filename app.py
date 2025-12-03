@@ -5,6 +5,7 @@ import time # Importamos time para simular que la IA "piensa"
 import pandas as pd
 import datetime
 import random
+import os
 from fpdf import FPDF
 from google import genai
 from google.genai import types
