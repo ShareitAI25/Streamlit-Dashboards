@@ -3,4 +3,4 @@ numpy
 matplotlib
 fpdf
 google-genai
-supabase-py
+supabase
