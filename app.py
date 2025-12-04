@@ -370,17 +370,21 @@ for message in current_messages:
             with st.expander("View Generated SQL"):
                 st.code(message["sql"], language="sql")
         
-        if "data" in message:
+        if message.get("data") is not None:
             st.dataframe(message["data"])
             
             # Dynamic Chart Rendering
-            chart_config = message.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
-            if chart_config["type"] == "bar":
-                st.bar_chart(message["data"], x=chart_config["x"], y=chart_config["y"])
-            elif chart_config["type"] == "line":
-                # Fallback check for columns
-                if chart_config["x"] in message["data"].columns and chart_config["y"] in message["data"].columns:
-                    st.line_chart(message["data"], x=chart_config["x"], y=chart_config["y"])
+            try:
+                chart_config = message.get("chart_config")
+                if chart_config:
+                    if chart_config.get("type") == "bar":
+                        st.bar_chart(message["data"], x=chart_config.get("x"), y=chart_config.get("y"))
+                    elif chart_config.get("type") == "line":
+                        # Fallback check for columns
+                        if chart_config.get("x") in message["data"].columns and chart_config.get("y") in message["data"].columns:
+                            st.line_chart(message["data"], x=chart_config.get("x"), y=chart_config.get("y"))
+            except Exception as e:
+                st.warning(f"Could not render chart: {e}")
 
 # Starter Prompts (Only if chat is empty)
 if not current_messages:
@@ -438,22 +442,28 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
             st.dataframe(response_obj["data"])
             
             # Dynamic Chart Rendering
-            chart_config = response_obj.get("chart_config", {"type": "line", "x": "date", "y": "spend"})
-            if chart_config:
-                if chart_config["type"] == "bar":
-                    st.bar_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
-                elif chart_config["type"] == "line":
-                    if chart_config["x"] in response_obj["data"].columns and chart_config["y"] in response_obj["data"].columns:
-                        st.line_chart(response_obj["data"], x=chart_config["x"], y=chart_config["y"])
+            try:
+                chart_config = response_obj.get("chart_config")
+                if chart_config:
+                    if chart_config.get("type") == "bar":
+                        st.bar_chart(response_obj["data"], x=chart_config.get("x"), y=chart_config.get("y"))
+                    elif chart_config.get("type") == "line":
+                        if chart_config.get("x") in response_obj["data"].columns and chart_config.get("y") in response_obj["data"].columns:
+                            st.line_chart(response_obj["data"], x=chart_config.get("x"), y=chart_config.get("y"))
+            except Exception as e:
+                st.warning(f"Could not render chart: {e}")
             
             # PDF Download Button
-            pdf_bytes = generate_pdf_report(last_user_msg, response_obj["text"], response_obj["data"])
-            st.download_button(
-                label="📄 Download Professional PDF Report",
-                data=pdf_bytes,
-                file_name="amc_insight_report.pdf",
-                mime="application/pdf"
-            )
+            try:
+                pdf_bytes = generate_pdf_report(last_user_msg, response_obj["text"], response_obj["data"])
+                st.download_button(
+                    label="📄 Download Professional PDF Report",
+                    data=pdf_bytes,
+                    file_name="amc_insight_report.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"Could not generate PDF: {e}")
     
     # Guardar respuesta completa en historial
     st.session_state.chats[st.session_state.current_chat_id].append({
