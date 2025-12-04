@@ -6,11 +6,47 @@ from google.genai import types
 # Default system instruction
 DEFAULT_SYSTEM_INSTRUCTION = "You are an expert Amazon Marketing Cloud (AMC) Analyst. You help users optimize campaigns, analyze ROAS, and identify New-To-Brand opportunities. Keep answers concise and professional."
 
-def get_agent_response(client, system_instruction, user_query, selected_advertisers, date_range=None):
+def get_agent_response(client, supabase_client, system_instruction, user_query, selected_advertisers, date_range=None):
     """
     Generates response using Gemini API for text and Mock Logic for data/charts.
     Returns a dict with: text, sql, data (DataFrame), chart_config (dict)
     """
+    # --- SPECIAL COMMAND: SUPABASE TEST ---
+    if user_query.lower().strip() == "supabase":
+        try:
+            if supabase_client:
+                response = supabase_client.table("company").select("*").execute()
+                data = response.data
+                if data:
+                    df = pd.DataFrame(data)
+                    return {
+                        "text": "✅ Connection Successful! Here is the data from the `company` table in Supabase:",
+                        "sql": "SELECT * FROM company;",
+                        "data": df,
+                        "chart_config": None
+                    }
+                else:
+                    return {
+                        "text": "⚠️ Connection Successful, but the `company` table is empty.",
+                        "sql": "SELECT * FROM company;",
+                        "data": None,
+                        "chart_config": None
+                    }
+            else:
+                return {
+                    "text": "⚠️ Supabase client is not initialized. Please check your secrets.",
+                    "sql": None,
+                    "data": None,
+                    "chart_config": None
+                }
+        except Exception as e:
+            return {
+                "text": f"⚠️ Error querying Supabase: {str(e)}",
+                "sql": None,
+                "data": None,
+                "chart_config": None
+            }
+
     # 1. Determine Context
     if not selected_advertisers:
         where_clause = ""

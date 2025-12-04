@@ -199,7 +199,7 @@ if st.session_state.chats[st.session_state.current_chat_id] and st.session_state
     # B. Generar respuesta de la IA (Simulación)
     with st.chat_message("assistant"):
         # Call Mock Agent
-        response_obj = get_agent_response(client, system_instruction, last_user_msg, selected_advertisers, date_range)
+        response_obj = get_agent_response(client, supabase, system_instruction, last_user_msg, selected_advertisers, date_range)
         
         # Display Text
         st.markdown(response_obj["text"])
