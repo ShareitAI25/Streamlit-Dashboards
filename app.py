@@ -1,7 +1,7 @@
 import streamlit as st
 import datetime
 from modules.database import init_gemini, init_supabase
-from modules.agent import get_agent_response
+from modules.agent import get_agent_response, get_advertisers
 from modules.pdf_generator import generate_pdf_report
 
 # Initialize Clients
@@ -54,7 +54,7 @@ with st.sidebar:
     st.divider()
 
     # Lista simulada de anunciantes
-    advertisers = ["Brand A (Electronics)", "Brand B (Fashion)", "Brand C (Home & Kitchen)", "Global Corp"]
+    advertisers = get_advertisers(supabase)
     
     # Refactor: Use multiselect for flexible context
     selected_advertisers = st.multiselect(

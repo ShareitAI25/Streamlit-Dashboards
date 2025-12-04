@@ -188,3 +188,15 @@ def get_agent_response(client, supabase_client, system_instruction, user_query, 
         "data": df,
         "chart_config": chart_config
     }
+
+def get_advertisers(supabase_client):
+    """Fetch distinct advertiser names from Supabase."""
+    try:
+        if supabase_client:
+            response = supabase_client.table("amc_instance").select("name", distinct=True).execute()
+            data = response.data
+            advertisers = [item["name"] for item in data if "name" in item]
+            return advertisers
+    except Exception as e:
+        print(f"Error fetching advertisers from Supabase: {e}")
+    return []
