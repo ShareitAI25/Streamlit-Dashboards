@@ -14,6 +14,8 @@ from supabase import create_client, Client
 try:
     # Try to get key from secrets, otherwise handle gracefully
     api_key = st.secrets.get("GEMINI_API_KEY")
+    SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+    SUPABASE_SERVICE_ROLE_KEY = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
     if api_key:
         client = genai.Client(api_key=api_key)
     else:
@@ -24,8 +26,6 @@ except Exception as e:
 
 SYSTEM_INSTRUCTION = "You are an expert Amazon Marketing Cloud (AMC) Analyst. You help users optimize campaigns, analyze ROAS, and identify New-To-Brand opportunities. Keep answers concise and professional."
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 # ---------------------------------------------------------
 # NUEVA SECCIÓN: CHATBOT DE IA
@@ -238,7 +238,7 @@ def get_agent_response(user_query, selected_advertisers, date_range=None):
             full_prompt = f"{user_query}\n\n[Context: User is analyzing data for {context_msg} during {date_msg}.]"
             
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
                 contents=full_prompt
             )
